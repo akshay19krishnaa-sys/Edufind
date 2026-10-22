@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="efGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#173B5E" />
+      <stop offset="55%" stop-color="#086D7D" />
+      <stop offset="100%" stop-color="#168A8B" />
+    </linearGradient>
+    <filter id="efShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#173B5E" flood-opacity="0.25" />
+    </filter>
+  </defs>
+  <!-- Background squircle -->
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="url(#efGrad)" />
+  <!-- Stylized EduFind 'E' mark -->
+  <g filter="url(#efShadow)" fill="#FFFFFF">
+    <!-- Vertical left spine -->
+    <rect x="15" y="16" width="6.5" height="32" rx="1.5" />
+    <!-- Top bar -->
+    <rect x="15" y="16" width="22" height="6.5" rx="1.5" />
+    <!-- Middle bar (characteristic pill) -->
+    <rect x="15" y="29" width="16" height="5.5" rx="2.75" />
+    <!-- Bottom bar -->
+    <rect x="15" y="41.5" width="22" height="6.5" rx="1.5" />
+    <!-- Accent dot in top right -->
+    <circle cx="43" cy="20" r="3.5" fill="#f4c95d" />
+  </g>
+</svg>
