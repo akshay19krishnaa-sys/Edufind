@@ -61,10 +61,29 @@ const studentSchema = new mongoose.Schema(
     isActive: {
       type: Boolean,
       default: true,
+      index: true,
+    },
+    status: {
+      type: String,
+      enum: ["active", "suspended"],
+      default: "active",
+      index: true,
+    },
+    suspensionReason: {
+      type: String,
+      default: "",
     },
   },
   { timestamps: true }
 );
+
+studentSchema.pre("save", function () {
+  if (this.isModified("status")) {
+    this.isActive = this.status === "active";
+  } else if (this.isModified("isActive")) {
+    this.status = this.isActive ? "active" : "suspended";
+  }
+});
 
 const Student = mongoose.model("Student", studentSchema);
 

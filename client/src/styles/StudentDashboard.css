@@ -726,3 +726,223 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ── Student Applications Section ──────────────────── */
+
+.sd-apps-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin-top: 1rem;
+}
+
+.sd-app-card {
+  background: var(--color-white);
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-lg, 0.75rem);
+  padding: 1.5rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.sd-app-card:hover {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  border-color: #cbd5e1;
+}
+
+.sd-app-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.sd-app-inst-title {
+  margin: 0 0 0.25rem;
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--color-primary);
+}
+
+.sd-app-inst-title a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.sd-app-inst-title a:hover {
+  color: var(--color-secondary);
+}
+
+.sd-app-inst-location {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+.sd-app-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.85rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.sd-app-status-badge--pending {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+.sd-app-status-badge--accepted {
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #86efac;
+}
+
+.sd-app-status-badge--rejected {
+  background: #ffe4e6;
+  color: #be123c;
+  border: 1px solid #fecdd3;
+}
+
+.sd-app-details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 0.85rem;
+  padding: 1rem;
+  background: #f8fafc;
+  border-radius: var(--radius-md);
+  border: 1px solid #f1f5f9;
+}
+
+.sd-app-detail-item {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.sd-app-detail-item strong {
+  display: block;
+  font-size: 0.9rem;
+  color: var(--color-primary);
+  margin-top: 0.15rem;
+}
+
+.sd-app-notes {
+  padding: 0.75rem 1rem;
+  background: #f0fdf4;
+  border: 1px dashed #86efac;
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  color: #166534;
+}
+
+.sd-app-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.sd-app-contacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  font-size: 0.825rem;
+  color: var(--color-text-muted);
+}
+
+.sd-app-contacts a {
+  color: var(--color-secondary);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.sd-app-contacts a:hover {
+  text-decoration: underline;
+}
+
+.sd-app-view-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.825rem;
+  font-weight: 700;
+  color: var(--color-secondary);
+  text-decoration: none;
+  padding: 0.4rem 0.85rem;
+  border-radius: var(--radius-md);
+  background: var(--color-mint);
+  transition: all var(--transition-fast);
+}
+
+.sd-app-view-btn:hover {
+  background: #bbf7d0;
+  color: #166534;
+}
+
+/* Loading & Error States */
+.sd-apps-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 1.5rem;
+  gap: 1rem;
+  color: var(--color-text-muted);
+}
+
+.sd-apps-error {
+  background: #fef2f2;
+  border: 1px solid #fecdd3;
+  border-radius: var(--radius-lg);
+  padding: 2.5rem 1.5rem;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.sd-apps-error-title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #991b1b;
+}
+
+.sd-apps-error-desc {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #b91c1c;
+  max-width: 26rem;
+}
+
+.sd-retry-btn {
+  padding: 0.6rem 1.25rem;
+  border-radius: var(--radius-md);
+  background: #991b1b;
+  color: #ffffff;
+  border: none;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.sd-retry-btn:hover {
+  background: #7f1d1d;
+}

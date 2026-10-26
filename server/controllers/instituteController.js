@@ -294,10 +294,24 @@ const updateInstituteProfile = async (req, res) => {
   }
 };
 
-// Get all institutes (Public)
+// Get all institutes (Public) - Filters out suspended institutes and prioritizes featured institutes
 const getAllInstitutes = async (req, res) => {
   try {
-    const institutes = await Institute.find().sort({ createdAt: -1 });
+    const query = {
+      status: { $ne: "suspended" },
+      isActive: { $ne: false },
+    };
+
+    if (req.query.featured === "true") {
+      query.isFeatured = true;
+      query.isVerified = true;
+    }
+
+    const institutes = await Institute.find(query).sort({
+      isFeatured: -1,
+      featuredPriority: -1,
+      createdAt: -1,
+    });
 
     res.status(200).json({
       count: institutes.length,
@@ -316,9 +330,9 @@ const getInstituteById = async (req, res) => {
   try {
     const institute = await Institute.findById(req.params.id);
 
-    if (!institute) {
+    if (!institute || institute.status === "suspended" || institute.isActive === false) {
       return res.status(404).json({
-        message: "Institute not found",
+        message: "Institute not found or unavailable",
       });
     }
 

@@ -129,6 +129,9 @@ function Register() {
 
       if (data.token) {
         localStorage.setItem("edufind_student_token", data.token);
+        if (data.student) {
+          localStorage.setItem("edufind_student", JSON.stringify(data.student));
+        }
       }
 
       setTimeout(() => {

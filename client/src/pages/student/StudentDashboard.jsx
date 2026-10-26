@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import "../../styles/StudentDashboard.css";
+
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 /* ── Tiny inline SVG icons (no external dependency) ── */
 const Icon = {
@@ -93,9 +95,25 @@ const Icon = {
       <path d="M2.5 6.5h8M7 3l3.5 3.5L7 10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
   ),
+  location: (
+    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+      <path d="M6.5 1C4.567 1 3 2.567 3 4.5c0 2.625 3.5 7.5 3.5 7.5S10 7.125 10 4.5C10 2.567 8.433 1 6.5 1z" stroke="currentColor" strokeWidth="1.3"/>
+      <circle cx="6.5" cy="4.5" r="1.2" stroke="currentColor" strokeWidth="1.2"/>
+    </svg>
+  ),
+  verified: (
+    <svg width="12" height="12" viewBox="0 0 11 11" fill="none" aria-hidden="true">
+      <path d="M2 5.5l2.5 2.5L9 3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  ),
+  external: (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M12 9v4a1 1 0 01-1 1H3a1 1 0 01-1-1V5a1 1 0 011-1h4M9 2h5v5M6.5 9.5L14 2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  ),
 };
 
-/* ── Utility: first letter uppercase ── */
+/* ── Utility: initials ── */
 function initials(name = "") {
   return name
     .trim()
@@ -104,6 +122,16 @@ function initials(name = "") {
     .slice(0, 2)
     .map((w) => w[0].toUpperCase())
     .join("");
+}
+
+function formatDate(dateString) {
+  if (!dateString) return "";
+  const d = new Date(dateString);
+  return d.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 /* ── Sidebar nav items definition ── */
@@ -120,7 +148,7 @@ const NAV_ITEMS = [
   {
     group: "My Activity",
     items: [
-      { id: "applications", label: "My Applications",      icon: "applications", type: "section" },
+      { id: "applications", label: "My Applications",      icon: "applications", type: "section", available: true },
       { id: "enrolled",     label: "My Enrolled Courses",  icon: "enrolled",     type: "section" },
     ],
   },
@@ -171,8 +199,8 @@ const QUICK_CARDS = [
     icon: "applications",
     color: "violet",
     section: "applications",
-    cta: "View",
-    available: false,
+    cta: "View Applications",
+    available: true,
   },
   {
     id: "enrolled",
@@ -200,10 +228,51 @@ const QUICK_CARDS = [
    StudentDashboard
 ══════════════════════════════════════════════════════ */
 function StudentDashboard() {
-  const { student, logout } = useAuth();
+  const { student, token, logout } = useAuth();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeSection, setActiveSection] = useState("overview");
+
+  // Real Applications State
+  const [applications, setApplications] = useState([]);
+  const [loadingApps, setLoadingApps] = useState(true);
+  const [appsError, setAppsError] = useState(null);
+
+  const fetchApplications = useCallback(async () => {
+    if (!token) return;
+    setLoadingApps(true);
+    setAppsError(null);
+
+    try {
+      const res = await fetch(`${API_BASE}/api/applications/my`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (res.status === 401) {
+        logout();
+        navigate("/login", { replace: true });
+        return;
+      }
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || `Failed with status ${res.status}`);
+      }
+
+      const data = await res.json();
+      setApplications(Array.isArray(data.applications) ? data.applications : []);
+    } catch (err) {
+      setAppsError(err.message || "Failed to load applications");
+    } finally {
+      setLoadingApps(false);
+    }
+  }, [token, logout, navigate]);
+
+  useEffect(() => {
+    fetchApplications();
+  }, [fetchApplications]);
 
   const handleLogout = () => {
     logout();
@@ -304,25 +373,70 @@ function StudentDashboard() {
   const renderSection = () => {
     switch (activeSection) {
       case "applications":
-        return <EmptySection
-          icon="applications"
-          title="No Applications Yet"
-          body="You haven't applied to any institutes yet. Start exploring institutes and submit your first application."
-          actionLabel="Explore Institutes"
-          actionHref="/institutes"
-        />;
+        if (loadingApps) {
+          return (
+            <div className="sd-apps-loading" aria-live="polite">
+              <div className="inst-spinner" role="status" aria-label="Loading your applications..." />
+              <p>Fetching your admission applications...</p>
+            </div>
+          );
+        }
+
+        if (appsError) {
+          return (
+            <div className="sd-apps-error" role="alert">
+              <h2 className="sd-apps-error-title">Unable to Load Applications</h2>
+              <p className="sd-apps-error-desc">{appsError}</p>
+              <button
+                type="button"
+                className="sd-retry-btn"
+                onClick={fetchApplications}
+              >
+                Try Again
+              </button>
+            </div>
+          );
+        }
+
+        if (applications.length === 0) {
+          return (
+            <EmptySection
+              icon="applications"
+              title="No Applications Yet"
+              body="You haven't applied to any institutes yet. Explore accredited institutes and submit your first admission application."
+              actionLabel="Explore Institutes"
+              actionHref="/institutes"
+            />
+          );
+        }
+
+        return (
+          <ApplicationsSection
+            applications={applications}
+            onRefresh={fetchApplications}
+          />
+        );
+
       case "enrolled":
-        return <EmptySection
-          icon="enrolled"
-          title="No Enrolled Courses"
-          body="You haven't enrolled in any online courses yet. Browse our catalogue to find courses that match your goals."
-          actionLabel="Browse Courses"
-          actionHref="/courses"
-        />;
+        return (
+          <EmptySection
+            icon="enrolled"
+            title="No Enrolled Courses"
+            body="You haven't enrolled in any online courses yet. Browse our catalogue to find courses that match your goals."
+            actionLabel="Browse Courses"
+            actionHref="/courses"
+          />
+        );
       case "profile":
         return <ProfileSection student={student} />;
       default:
-        return <OverviewSection student={student} onCardClick={handleCardClick} />;
+        return (
+          <OverviewSection
+            student={student}
+            applicationsCount={applications.length}
+            onCardClick={handleCardClick}
+          />
+        );
     }
   };
 
@@ -371,7 +485,7 @@ function StudentDashboard() {
 }
 
 /* ── Overview section ── */
-function OverviewSection({ student, onCardClick }) {
+function OverviewSection({ student, applicationsCount, onCardClick }) {
   const studentName = student?.name || "Student";
   const firstName   = studentName.split(" ")[0];
 
@@ -390,7 +504,7 @@ function OverviewSection({ student, onCardClick }) {
       {/* Stats */}
       <div className="sd-stats-row">
         <div className="sd-stat-card">
-          <p className="sd-stat-number">0</p>
+          <p className="sd-stat-number">{applicationsCount}</p>
           <p className="sd-stat-label">Applications</p>
         </div>
         <div className="sd-stat-card">
@@ -436,6 +550,112 @@ function OverviewSection({ student, onCardClick }) {
             </span>
           </button>
         ))}
+      </div>
+    </>
+  );
+}
+
+/* ── Real Applications Section ── */
+function ApplicationsSection({ applications, onRefresh }) {
+  return (
+    <>
+      <div className="sd-welcome" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "1rem" }}>
+        <div>
+          <h1 className="sd-welcome-greeting">
+            My <span>Applications</span>
+          </h1>
+          <p className="sd-welcome-sub">
+            Track the status of your admission applications across institutes.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onRefresh}
+          className="sd-empty-action"
+          style={{ marginTop: 0 }}
+        >
+          Refresh Status
+        </button>
+      </div>
+
+      <div className="sd-apps-list">
+        {applications.map((app) => {
+          const inst = app.institute || {};
+          const status = app.status || "pending";
+
+          return (
+            <div key={app._id} className="sd-app-card">
+              <div className="sd-app-card-head">
+                <div>
+                  <h3 className="sd-app-inst-title">
+                    {inst._id ? (
+                      <Link to={`/institutes/${inst._id}`}>{inst.name || "Institute"}</Link>
+                    ) : (
+                      inst.name || "Institute"
+                    )}
+                  </h3>
+                  {inst.location && (
+                    <span className="sd-app-inst-location">
+                      {Icon.location} {inst.location}
+                    </span>
+                  )}
+                </div>
+
+                <span className={`sd-app-status-badge sd-app-status-badge--${status}`}>
+                  {status === "pending" && "Pending Review"}
+                  {status === "accepted" && "Accepted"}
+                  {status === "rejected" && "Not Accepted"}
+                </span>
+              </div>
+
+              <div className="sd-app-details-grid">
+                <div className="sd-app-detail-item">
+                  Selected Course / Track:
+                  <strong>{app.course || "General Admission"}</strong>
+                </div>
+                <div className="sd-app-detail-item">
+                  Application Date:
+                  <strong>{formatDate(app.createdAt)}</strong>
+                </div>
+                <div className="sd-app-detail-item">
+                  Decision Date:
+                  <strong>{app.decisionDate ? formatDate(app.decisionDate) : "Awaiting Review"}</strong>
+                </div>
+                <div className="sd-app-detail-item">
+                  Institute Verification:
+                  <strong>{inst.isVerified ? "Verified Partner" : "Registered Partner"}</strong>
+                </div>
+              </div>
+
+              {app.decisionNotes && (
+                <div className="sd-app-notes">
+                  <strong>Institute Note:</strong> {app.decisionNotes}
+                </div>
+              )}
+
+              <div className="sd-app-card-foot">
+                <div className="sd-app-contacts">
+                  {inst.contactEmail && (
+                    <span>
+                      Email: <a href={`mailto:${inst.contactEmail}`}>{inst.contactEmail}</a>
+                    </span>
+                  )}
+                  {inst.contactPhone && (
+                    <span>
+                      Phone: <a href={`tel:${inst.contactPhone}`}>{inst.contactPhone}</a>
+                    </span>
+                  )}
+                </div>
+
+                {inst._id && (
+                  <Link to={`/institutes/${inst._id}`} className="sd-app-view-btn">
+                    View Institute Profile {Icon.external}
+                  </Link>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </>
   );

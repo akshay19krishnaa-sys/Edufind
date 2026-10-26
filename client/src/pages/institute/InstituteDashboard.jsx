@@ -45,6 +45,33 @@ const Icon = {
       <path d="M8 7v4M8 5.25v.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
     </svg>
   ),
+  check: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M3 8.5l3.5 3.5 6.5-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  ),
+  cross: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+    </svg>
+  ),
+  user: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <circle cx="8" cy="5" r="3" stroke="currentColor" strokeWidth="1.5"/>
+      <path d="M2.5 14c0-3.038 2.462-5.5 5.5-5.5s5.5 2.462 5.5 5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+    </svg>
+  ),
+  email: (
+    <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <rect x="1" y="3" width="12" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.4"/>
+      <path d="M1 4l6 4 6-4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+    </svg>
+  ),
+  phone: (
+    <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <path d="M9.5 12.5c-4.4 0-8-3.6-8-8 0-.5.4-.9.9-1.3l1.2-.8c.4-.3.9-.1 1.1.3l.8 1.8c.2.4 0 .9-.4 1.1l-.6.4c.5 1.3 1.5 2.3 2.8 2.8l.4-.6c.3-.4.8-.6 1.1-.4l1.8.8c.4.2.6.7.3 1.1l-.8 1.2c-.4.5-.8.9-1.3.9-.1-.3-.3-.3-.3-.3z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/>
+    </svg>
+  ),
 };
 
 function formatFees(val) {
@@ -62,6 +89,16 @@ function getInitials(name = "") {
     .slice(0, 2)
     .map((w) => w[0]?.toUpperCase() ?? "")
     .join("");
+}
+
+function formatDate(dateString) {
+  if (!dateString) return "";
+  const d = new Date(dateString);
+  return d.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 function InstituteDashboard() {
@@ -82,6 +119,13 @@ function InstituteDashboard() {
     image: "",
     courses: [""],
   });
+
+  // Applications state
+  const [applications, setApplications] = useState([]);
+  const [loadingApps, setLoadingApps] = useState(true);
+  const [appsError, setAppsError] = useState(null);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [updatingAppId, setUpdatingAppId] = useState(null);
 
   // Sync edit form from current institute
   const resetEditForm = useCallback(() => {
@@ -115,7 +159,6 @@ function InstituteDashboard() {
         });
 
         if (res.status === 401) {
-          // Token expired or invalid
           logout();
           navigate("/institute/login", { replace: true });
           return;
@@ -137,6 +180,43 @@ function InstituteDashboard() {
     loadFreshProfile();
     return () => { isMounted = false; };
   }, [token, logout, navigate, updateInstitute]);
+
+  // Fetch received applications
+  const fetchApplications = useCallback(async () => {
+    if (!token) return;
+    setLoadingApps(true);
+    setAppsError(null);
+
+    try {
+      const res = await fetch(`${API_BASE}/api/applications/institute`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (res.status === 401) {
+        logout();
+        navigate("/institute/login", { replace: true });
+        return;
+      }
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || `Failed to fetch applications (${res.status})`);
+      }
+
+      const data = await res.json();
+      setApplications(Array.isArray(data.applications) ? data.applications : []);
+    } catch (err) {
+      setAppsError(err.message || "Failed to load admission applications");
+    } finally {
+      setLoadingApps(false);
+    }
+  }, [token, logout, navigate]);
+
+  useEffect(() => {
+    fetchApplications();
+  }, [fetchApplications]);
 
   useEffect(() => {
     resetEditForm();
@@ -236,8 +316,64 @@ function InstituteDashboard() {
     }
   };
 
+  // Accept or Reject application
+  const handleUpdateApplicationStatus = async (appId, newStatus) => {
+    if (!token || !appId) return;
+
+    let decisionNotes = "";
+    if (newStatus === "accepted") {
+      const promptNote = window.prompt("Optional message or welcome instructions for the applicant:", "Your application has been reviewed and accepted!");
+      if (promptNote !== null) decisionNotes = promptNote;
+    } else if (newStatus === "rejected") {
+      const promptNote = window.prompt("Optional reason or feedback for rejection:", "Thank you for applying. Currently, we are unable to accept your application.");
+      if (promptNote !== null) decisionNotes = promptNote;
+    }
+
+    setUpdatingAppId(appId);
+
+    try {
+      const res = await fetch(`${API_BASE}/api/applications/${appId}/status`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          status: newStatus,
+          decisionNotes,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        alert(data.message || "Failed to update application status");
+        return;
+      }
+
+      // Update state locally
+      setApplications((prev) =>
+        prev.map((app) => (app._id === appId ? { ...app, ...data.application } : app))
+      );
+    } catch (err) {
+      alert("Failed to update status. Please try again.");
+    } finally {
+      setUpdatingAppId(null);
+    }
+  };
+
   const initials = getInitials(institute?.name || "Institute");
   const isVerified = Boolean(institute?.isVerified);
+
+  // Filtered applications
+  const filteredApps = applications.filter((app) => {
+    if (statusFilter === "all") return true;
+    return app.status === statusFilter;
+  });
+
+  const pendingCount = applications.filter((a) => a.status === "pending").length;
+  const acceptedCount = applications.filter((a) => a.status === "accepted").length;
+  const rejectedCount = applications.filter((a) => a.status === "rejected").length;
 
   return (
     <div className="id-shell">
@@ -350,6 +486,14 @@ function InstituteDashboard() {
         {/* ── Quick Metrics Grid ── */}
         <div className="id-grid">
           <div className="id-card">
+            <p className="id-card-label">Applications Received</p>
+            <p className="id-card-value">{applications.length}</p>
+            <p className="id-card-sub">
+              {pendingCount > 0 ? `${pendingCount} pending review` : "All reviewed"}
+            </p>
+          </div>
+
+          <div className="id-card">
             <p className="id-card-label">Programs Offered</p>
             <p className="id-card-value">{institute?.courses?.length || 0}</p>
             <p className="id-card-sub">Active training tracks</p>
@@ -366,15 +510,182 @@ function InstituteDashboard() {
             <p className="id-card-value">{institute?.duration || "Not specified"}</p>
             <p className="id-card-sub">Program timeline</p>
           </div>
-
-          <div className="id-card">
-            <p className="id-card-label">Account Contact</p>
-            <p className="id-card-value" style={{ fontSize: "1rem", wordBreak: "break-all" }}>
-              {institute?.contactEmail || "—"}
-            </p>
-            <p className="id-card-sub">{institute?.contactPhone || "No phone listed"}</p>
-          </div>
         </div>
+
+        {/* ── Applications Section (Requirement 10) ── */}
+        <section className="id-section-card" aria-labelledby="applications-heading">
+          <div className="id-section-header id-section-header-actions">
+            <div>
+              <h2 id="applications-heading" className="id-section-title">
+                Student Admission Applications
+              </h2>
+              <p style={{ margin: "0.2rem 0 0", fontSize: "0.85rem", color: "#64748b" }}>
+                Review prospective student applications and update admission status.
+              </p>
+            </div>
+
+            {/* Filter pills */}
+            <div className="id-filter-pills" role="tablist" aria-label="Application status filters">
+              <button
+                type="button"
+                className={`id-filter-pill ${statusFilter === "all" ? "id-filter-pill--active" : ""}`}
+                onClick={() => setStatusFilter("all")}
+              >
+                All ({applications.length})
+              </button>
+              <button
+                type="button"
+                className={`id-filter-pill ${statusFilter === "pending" ? "id-filter-pill--active" : ""}`}
+                onClick={() => setStatusFilter("pending")}
+              >
+                Pending ({pendingCount})
+              </button>
+              <button
+                type="button"
+                className={`id-filter-pill ${statusFilter === "accepted" ? "id-filter-pill--active" : ""}`}
+                onClick={() => setStatusFilter("accepted")}
+              >
+                Accepted ({acceptedCount})
+              </button>
+              <button
+                type="button"
+                className={`id-filter-pill ${statusFilter === "rejected" ? "id-filter-pill--active" : ""}`}
+                onClick={() => setStatusFilter("rejected")}
+              >
+                Rejected ({rejectedCount})
+              </button>
+            </div>
+          </div>
+
+          {loadingApps ? (
+            <div style={{ textAlign: "center", padding: "3rem 1rem", color: "#64748b" }}>
+              <p>Loading received applications...</p>
+            </div>
+          ) : appsError ? (
+            <div className="id-apps-error" role="alert">
+              <span>{appsError}</span>
+              <button
+                type="button"
+                className="id-btn-secondary"
+                onClick={fetchApplications}
+              >
+                Retry
+              </button>
+            </div>
+          ) : filteredApps.length === 0 ? (
+            <div className="id-apps-empty">
+              <p style={{ margin: "0 0 0.5rem", fontWeight: "600", color: "#1e293b" }}>
+                {statusFilter === "all"
+                  ? "No admission applications received yet."
+                  : `No applications with status "${statusFilter}".`}
+              </p>
+              <p style={{ margin: 0, fontSize: "0.85rem" }}>
+                When prospective students apply to your institute from their EduFind account, their profiles will appear here for evaluation.
+              </p>
+            </div>
+          ) : (
+            <div className="id-apps-container">
+              {filteredApps.map((app) => {
+                const studentData = app.student || {};
+                const studentName = app.fullName || studentData.name || "Student Applicant";
+                const studentEmail = app.email || studentData.email || "";
+                const studentPhone = app.phone || studentData.phone || "";
+                const studentQualification = app.qualification || studentData.qualification || "Not specified";
+                const studentGender = studentData.gender || "Not specified";
+                const av = getInitials(studentName);
+                const isUpdating = updatingAppId === app._id;
+
+                return (
+                  <article key={app._id} className="id-app-item">
+                    <div className="id-app-item-top">
+                      <div className="id-app-applicant">
+                        <div className="id-app-avatar">{av}</div>
+                        <div>
+                          <h3 className="id-app-name">{studentName}</h3>
+                          <div className="id-app-meta">
+                            {studentEmail && (
+                              <span>
+                                {Icon.email} <a href={`mailto:${studentEmail}`}>{studentEmail}</a>
+                              </span>
+                            )}
+                            {studentPhone && (
+                              <span>
+                                {Icon.phone} <a href={`tel:${studentPhone}`}>{studentPhone}</a>
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <span className={`id-status-badge id-status-badge--${app.status}`}>
+                        {app.status === "pending" && "Pending Review"}
+                        {app.status === "accepted" && "Accepted"}
+                        {app.status === "rejected" && "Rejected"}
+                      </span>
+                    </div>
+
+                    <div className="id-app-grid">
+                      <div className="id-app-field">
+                        Applied Course:
+                        <strong>{app.course || "General Admission"}</strong>
+                      </div>
+                      <div className="id-app-field">
+                        Highest Qualification:
+                        <strong>{studentQualification}</strong>
+                      </div>
+                      <div className="id-app-field">
+                        Gender:
+                        <strong>{studentGender}</strong>
+                      </div>
+                      <div className="id-app-field">
+                        Date Submitted:
+                        <strong>{formatDate(app.createdAt)}</strong>
+                      </div>
+                    </div>
+
+                    {app.statement && (
+                      <div className="id-app-statement">
+                        <strong>Applicant Statement:</strong> &ldquo;{app.statement}&rdquo;
+                      </div>
+                    )}
+
+                    {app.decisionNotes && (
+                      <div style={{ fontSize: "0.825rem", color: "#475569", background: "#f8fafc", padding: "0.5rem 0.75rem", borderRadius: "6px" }}>
+                        <strong>Institute Note on File:</strong> {app.decisionNotes} {app.decisionDate && `(${formatDate(app.decisionDate)})`}
+                      </div>
+                    )}
+
+                    <div className="id-app-actions">
+                      <span style={{ fontSize: "0.8rem", color: "#64748b", marginRight: "auto" }}>
+                        Change status:
+                      </span>
+
+                      <button
+                        type="button"
+                        className="id-btn-accept"
+                        disabled={isUpdating || app.status === "accepted"}
+                        onClick={() => handleUpdateApplicationStatus(app._id, "accepted")}
+                        title="Accept this student application"
+                      >
+                        {Icon.check} {app.status === "accepted" ? "Accepted" : "Accept"}
+                      </button>
+
+                      <button
+                        type="button"
+                        className="id-btn-reject"
+                        disabled={isUpdating || app.status === "rejected"}
+                        onClick={() => handleUpdateApplicationStatus(app._id, "rejected")}
+                        title="Reject this student application"
+                      >
+                        {Icon.cross} {app.status === "rejected" ? "Rejected" : "Reject"}
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </section>
 
         {/* ── Courses Section ── */}
         <div className="id-section-card">
@@ -454,14 +765,40 @@ function InstituteDashboard() {
 
                   <div className="id-form-grid id-form-grid-2">
                     <div className="id-form-field">
-                      <label htmlFor="edit-location">Location *</label>
+                      <label htmlFor="edit-loc">Location (City, State) *</label>
                       <input
-                        id="edit-location"
+                        id="edit-loc"
                         name="location"
                         type="text"
                         value={editForm.location}
                         onChange={handleEditChange}
                         required
+                      />
+                    </div>
+
+                    <div className="id-form-field">
+                      <label htmlFor="edit-fees">Estimated Fees (INR)</label>
+                      <input
+                        id="edit-fees"
+                        name="fees"
+                        type="number"
+                        min="0"
+                        value={editForm.fees}
+                        onChange={handleEditChange}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="id-form-grid id-form-grid-2">
+                    <div className="id-form-field">
+                      <label htmlFor="edit-dur">Program Duration</label>
+                      <input
+                        id="edit-dur"
+                        name="duration"
+                        type="text"
+                        placeholder="e.g. 6 Months, 1 Year"
+                        value={editForm.duration}
+                        onChange={handleEditChange}
                       />
                     </div>
 
@@ -477,75 +814,51 @@ function InstituteDashboard() {
                     </div>
                   </div>
 
-                  <div className="id-form-grid id-form-grid-2">
-                    <div className="id-form-field">
-                      <label htmlFor="edit-fees">Fees (₹)</label>
-                      <input
-                        id="edit-fees"
-                        name="fees"
-                        type="number"
-                        min="0"
-                        value={editForm.fees}
-                        onChange={handleEditChange}
-                      />
-                    </div>
-
-                    <div className="id-form-field">
-                      <label htmlFor="edit-duration">Duration</label>
-                      <input
-                        id="edit-duration"
-                        name="duration"
-                        type="text"
-                        placeholder="e.g. 6 months"
-                        value={editForm.duration}
-                        onChange={handleEditChange}
-                      />
-                    </div>
-                  </div>
-
                   <div className="id-form-field">
-                    <label htmlFor="edit-image">Image URL</label>
+                    <label htmlFor="edit-img">Image URL</label>
                     <input
-                      id="edit-image"
+                      id="edit-img"
                       name="image"
-                      type="url"
-                      placeholder="https://example.com/photo.jpg"
+                      type="text"
+                      placeholder="https://example.com/logo.jpg"
                       value={editForm.image}
                       onChange={handleEditChange}
                     />
                   </div>
 
+                  {/* Course list */}
                   <div className="id-form-field">
-                    <label>Courses Offered</label>
-                    {editForm.courses.map((course, idx) => (
-                      <div key={idx} style={{ display: "flex", gap: "0.5rem", marginBottom: "0.4rem" }}>
-                        <input
-                          type="text"
-                          placeholder="e.g. Python Full Stack"
-                          value={course}
-                          onChange={(e) => handleCourseChange(idx, e.target.value)}
-                          style={{ flex: 1 }}
-                        />
-                        {editForm.courses.length > 1 && (
+                    <label>Offered Courses &amp; Programs</label>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                      {editForm.courses.map((course, idx) => (
+                        <div key={idx} style={{ display: "flex", gap: "0.5rem" }}>
+                          <input
+                            type="text"
+                            value={course}
+                            placeholder={`Course ${idx + 1}`}
+                            onChange={(e) => handleCourseChange(idx, e.target.value)}
+                            style={{ flex: 1 }}
+                          />
                           <button
                             type="button"
                             className="id-btn-secondary"
                             onClick={() => removeCourse(idx)}
-                            style={{ padding: "0.5rem 0.8rem", color: "#dc2626" }}
+                            style={{ padding: "0.5rem 0.75rem" }}
+                            title="Remove course"
                           >
-                            Remove
+                            &times;
                           </button>
-                        )}
-                      </div>
-                    ))}
-                    <button
-                      type="button"
-                      className="id-btn-secondary"
-                      onClick={addCourse}
-                      style={{ alignSelf: "flex-start", marginTop: "0.3rem" }}
-                    >
-                      + Add Course
-                    </button>
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        className="id-btn-secondary"
+                        onClick={addCourse}
+                        style={{ alignSelf: "flex-start", marginTop: "0.25rem" }}
+                      >
+                        + Add Course
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -558,11 +871,7 @@ function InstituteDashboard() {
                 >
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  id="save-institute-profile-btn"
-                  className="id-btn-primary"
-                >
+                <button type="submit" className="id-btn-primary">
                   Save Changes
                 </button>
               </div>

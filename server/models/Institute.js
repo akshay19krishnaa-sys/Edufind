@@ -1,5 +1,6 @@
-
 const mongoose = require("mongoose");
+
+const INSTITUTE_STATUSES = ["pending", "verified", "rejected", "suspended"];
 
 const instituteSchema = new mongoose.Schema(
   {
@@ -58,9 +59,64 @@ const instituteSchema = new mongoose.Schema(
     isVerified: {
       type: Boolean,
       default: false,
+      index: true,
+    },
+    status: {
+      type: String,
+      enum: INSTITUTE_STATUSES,
+      default: "pending",
+      index: true,
+    },
+    isActive: {
+      type: Boolean,
+      default: true,
+      index: true,
+    },
+    rejectionReason: {
+      type: String,
+      default: "",
+    },
+    reviewNotes: {
+      type: String,
+      default: "",
+    },
+    isFeatured: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    featuredPriority: {
+      type: Number,
+      default: 0,
+    },
+    featuredUntil: {
+      type: Date,
     },
   },
   { timestamps: true }
 );
 
-module.exports = mongoose.model("Institute", instituteSchema);
+// Pre-save hook to ensure status & isVerified stay synchronized
+instituteSchema.pre("save", function () {
+  if (this.isModified("status")) {
+    if (this.status === "verified") {
+      this.isVerified = true;
+      this.isActive = true;
+    } else if (this.status === "suspended") {
+      this.isActive = false;
+    } else if (this.status === "rejected") {
+      this.isVerified = false;
+    } else if (this.status === "pending") {
+      this.isVerified = false;
+    }
+  } else if (this.isModified("isVerified")) {
+    if (this.isVerified && this.status === "pending") {
+      this.status = "verified";
+    }
+  }
+});
+
+const Institute = mongoose.model("Institute", instituteSchema);
+
+module.exports = Institute;
+module.exports.INSTITUTE_STATUSES = INSTITUTE_STATUSES;

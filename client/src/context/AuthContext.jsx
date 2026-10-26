@@ -10,19 +10,37 @@ export const STUDENT_DATA_KEY  = "edufind_student";
 
 /** Decode the JWT payload from Base64Url — reads claims, does NOT verify signature. */
 function decodeJwtPayload(token) {
+  if (!token || typeof token !== "string") return null;
   try {
-    const segment = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
-    return JSON.parse(atob(segment));
+    const parts = token.split(".");
+    if (parts.length < 2) return null;
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const jsonStr = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join("")
+    );
+    return JSON.parse(jsonStr);
   } catch {
-    return null;
+    try {
+      const parts = token.split(".");
+      const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+      return JSON.parse(atob(base64));
+    } catch {
+      return null;
+    }
   }
 }
 
 /** Returns true if the token is missing or its exp claim is in the past. */
 function isTokenExpired(token) {
   const payload = decodeJwtPayload(token);
-  if (!payload?.exp) return true;
-  return Date.now() / 1000 > payload.exp;
+  if (!payload) return true;
+  if (typeof payload.exp === "number") {
+    return Date.now() / 1000 > payload.exp;
+  }
+  return false;
 }
 
 // ─── Bootstrap: load auth state from localStorage ────────────────────────────
@@ -38,8 +56,38 @@ function readStorage() {
       return { token: null, student: null };
     }
 
-    const raw     = localStorage.getItem(STUDENT_DATA_KEY);
-    const student = raw ? JSON.parse(raw) : null;
+    const payload = decodeJwtPayload(token);
+
+    // Safety: If token payload explicitly has a non-student role (e.g. "institute"), do not use for student auth
+    if (payload?.role && payload.role !== "student") {
+      localStorage.removeItem(STUDENT_TOKEN_KEY);
+      localStorage.removeItem(STUDENT_DATA_KEY);
+      return { token: null, student: null };
+    }
+
+    const raw = localStorage.getItem(STUDENT_DATA_KEY);
+    let student = null;
+    if (raw) {
+      try {
+        student = JSON.parse(raw);
+      } catch {
+        student = null;
+      }
+    }
+
+    // If student object is missing or lacks role, reconstruct/enrich from token payload
+    if (!student) {
+      student = {
+        _id: payload?.id || "",
+        id: payload?.id || "",
+        role: payload?.role || "student",
+      };
+      localStorage.setItem(STUDENT_DATA_KEY, JSON.stringify(student));
+    } else if (!student.role) {
+      student.role = payload?.role || "student";
+      localStorage.setItem(STUDENT_DATA_KEY, JSON.stringify(student));
+    }
+
     return { token, student };
   } catch {
     return { token: null, student: null };
@@ -59,9 +107,21 @@ export function AuthProvider({ children }) {
    * Persists token and student object to localStorage and updates React state.
    */
   const login = useCallback((token, studentData) => {
+    const payload = decodeJwtPayload(token);
+    const resolvedStudent = studentData
+      ? {
+          ...studentData,
+          role: studentData.role || payload?.role || "student",
+        }
+      : {
+          _id: payload?.id || "",
+          id: payload?.id || "",
+          role: payload?.role || "student",
+        };
+
     localStorage.setItem(STUDENT_TOKEN_KEY, token);
-    localStorage.setItem(STUDENT_DATA_KEY, JSON.stringify(studentData));
-    setAuth({ token, student: studentData });
+    localStorage.setItem(STUDENT_DATA_KEY, JSON.stringify(resolvedStudent));
+    setAuth({ token, student: resolvedStudent });
   }, []);
 
   /**
@@ -77,7 +137,7 @@ export function AuthProvider({ children }) {
   const value = {
     token:           auth.token,
     student:         auth.student,
-    isAuthenticated: Boolean(auth.token),
+    isAuthenticated: Boolean(auth.token && auth.student && auth.student.role === "student"),
     login,
     logout,
   };
